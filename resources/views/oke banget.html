@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistik Wilayah</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.10.25/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.25/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.25/js/dataTables.bootstrap5.min.js"></script>
+    <style>
+        canvas {
+            max-width: 400px;
+            max-height: 400px;
+        }
+        .progress-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .progress-bar-wrapper {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+        .img-wrapper {
+            width: 50px;
+            height: 50px;
+            margin-right: 10px;
+        }
+        .img-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+        .percentage {
+            font-size: 16px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-3">
+        <h3 class="text-center">Statistik Data Wilayah</h3>
+
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <select id="filter-kecamatan" class="form-select">
+                    <option value="">Semua Kecamatan</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select id="filter-kelurahan" class="form-select" disabled>
+                    <option value="">Semua Kelurahan</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-md-2 col-sm-2">
+                <h4>Statistik Wilayah</h4>
+                <canvas id="wilayahChart"></canvas>
+            </div>
+            <div class="col-md-2 col-sm-2">
+                <h4>Statistik Paslon</h4>
+                <canvas id="gambarIdChart"></canvas>
+            </div>
+            <div class="col-md-2 col-sm-3">
+                <h4>Kategori Pemilih</h4>
+                <canvas id="kategoriChart"></canvas>
+            </div>
+            <div class="col-md-2 col-sm-4">
+                <div id="progress-bars-container"></div>
+            </div>
+        </div>
+
+        <!-- Add the progress container -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div id="progress-container" class="progress" style="display: none;">
+                    <div id="progress-bar" class="progress-bar bg-success" role="progressbar" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <h4 class="mt-5">Data Wilayah</h4>
+        <table class="table table-bordered" id="dataTable">
+            <thead>
+                <tr>
+                    <th>No</th>
+                    <th>Kecamatan</th>
+                    <th>Kelurahan</th>
+                    <th>Nama</th>
+                    <th>Paslon</th>
+                    <th>Kategori</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            let wilayahChart, gambarIdChart, kategoriChart;
+
+            // Inisialisasi DataTables
+            const table = $('#dataTable').DataTable({
+                "pageLength": 10
+            });
+
+            loadKecamatan(1312);
+
+            document.getElementById('filter-kecamatan').addEventListener('change', function() {
+                const kecamatan = this.value;
+                resetSelects(['filter-kelurahan']);
+                if (kecamatan) loadKelurahan(kecamatan);
+                fetchSurveyData();
+            });
+
+            document.getElementById('filter-kelurahan').addEventListener('change', fetchSurveyData);
+
+            function fetchSurveyData() {
+    const kecamatan = document.getElementById('filter-kecamatan').value;
+    const kelurahan = document.getElementById('filter-kelurahan').value;
+
+    fetch(`/fetch-statistics?kecamatan=${kecamatan || ''}&kelurahan=${kelurahan || ''}`)
+        .then(response => response.json())
+        .then(data => {
+            // Periksa apakah ada data yang dikembalikan dan nama calon lengkap
+            if (data.length === 0) {
+                console.log('Tidak ada data yang tersedia');
+                return;
+            }
+            // Update Progress Bars
+            updateProgressBars(data);
+            // Update tabel dan grafik lainnya
+            updateTable(data);
+            updateCharts(data);
+        })
+        .catch(error => {
+            console.error('Error fetching survey data:', error);
+        });
+}
+
+// function updateProgressBars(data) {
+//     const totalVotes = data.length; // Jumlah total pemilih
+//     const counts = {}; // Untuk menghitung jumlah suara per calon
+
+//     // Hitung jumlah suara untuk setiap calon (nama_calon)
+//     data.forEach(item => {
+//         const calon = item.nama_calon || 'Tidak diketahui';
+//         counts[calon] = (counts[calon] || 0) + 1;
+//     });
+
+//     // Kosongkan container sebelum menambahkan progress bars baru
+//     const progressBarsContainer = document.getElementById('progress-bars-container');
+//     progressBarsContainer.innerHTML = '';
+
+//     // Buat progress bars secara dinamis berdasarkan jumlah suara per calon
+//     Object.keys(counts).forEach(calon => {
+//         const voteCount = counts[calon];
+//         const percentage = ((voteCount / totalVotes) * 100).toFixed(2); // Hitung persentase
+
+//         // Buat progress bar untuk setiap calon
+//         const progressBarWrapper = document.createElement('div');
+//         progressBarWrapper.classList.add('progress', 'mb-3');
+
+//         const progressBar = document.createElement('div');
+//         progressBar.classList.add('progress-bar', 'bg-success');
+//         progressBar.style.width = `${percentage}%`;
+//         progressBar.textContent = `${calon}: ${percentage}%`; // Tampilkan nama calon dan persentasenya
+
+//         // Tambahkan progress bar ke container
+//         progressBarWrapper.appendChild(progressBar);
+//         progressBarsContainer.appendChild(progressBarWrapper);
+//     });
+// }
+
+function updateProgressBars(data) {
+    const totalVotes = data.length; // Jumlah total pemilih
+    const counts = {}; // Untuk menghitung jumlah suara per calon
+
+    // Hitung jumlah suara untuk setiap calon (nama_calon)
+    data.forEach(item => {
+        const calon = item.nama_calon || 'Tidak diketahui';
+        counts[calon] = (counts[calon] || 0) + 1;
+    });
+
+    // Kosongkan container sebelum menambahkan progress bars baru
+    const progressBarsContainer = document.getElementById('progress-bars-container');
+    progressBarsContainer.innerHTML = '';
+
+    // Buat progress bars secara dinamis berdasarkan jumlah suara per calon
+    Object.keys(counts).forEach(calon => {
+        const voteCount = counts[calon];
+        const percentage = ((voteCount / totalVotes) * 100).toFixed(2); // Hitung persentase
+
+        // Buat container untuk gambar, progress bar, dan persentase
+        const progressContainer = document.createElement('div');
+        progressContainer.classList.add('progress-container');
+
+        const imgWrapper = document.createElement('div');
+        imgWrapper.classList.add('img-wrapper');
+
+        const img = document.createElement('img');
+        if (calon === 'Hamsuardi dan Kusnadi') {
+            img.src = '{{ asset('images/ok/HK.png') }}';
+        } else if (calon === 'Yulianto dan M. Ihpan') {
+            img.src = '{{ asset('images/ok/YM.png') }}';
+        } else if (calon === 'Tuanku Jailani dan Syamsul Bahri') {
+            img.src = '{{ asset('images/ok/TS.png') }}';
+        } else if (calon === 'Daliyus K. dan Heri Miheldi') {
+            img.src = '{{ asset('images/ok/DH.png') }}';
+        } else {
+            img.src = 'https://via.placeholder.com/50';
+        }
+        img.alt = calon;
+
+        // Tambahkan gambar ke dalam wrapper gambar
+        imgWrapper.appendChild(img);
+
+        // Buat wrapper untuk progress bar
+        const progressBarWrapper = document.createElement('div');
+        progressBarWrapper.classList.add('progress-bar-wrapper');
+
+        // Buat progress bar container
+        const progress = document.createElement('div');
+        progress.classList.add('progress');
+
+        // Buat progress bar
+        const progressBar = document.createElement('div');
+        progressBar.classList.add('progress-bar', 'bg-success');
+        progressBar.style.width = `${percentage}%`;
+
+        // Tambahkan progress bar ke dalam container progress
+        progress.appendChild(progressBar);
+        progressBarWrapper.appendChild(progress);
+
+        // Buat elemen untuk menampilkan persentase di luar kotak progress bar
+        const percentageLabel = document.createElement('div');
+        percentageLabel.classList.add('percentage');
+        percentageLabel.textContent = `${percentage}%`;
+
+        // Tambahkan gambar, progress bar, dan persentase ke dalam container
+        progressContainer.appendChild(imgWrapper); // Gambar calon
+        progressContainer.appendChild(progressBarWrapper); // Progress bar
+        progressContainer.appendChild(percentageLabel); // Label persentase
+
+        // Tambahkan container ke progress bars container
+        progressBarsContainer.appendChild(progressContainer);
+
+        // Tambahkan nama calon di atas progress bar
+        // const calonLabel = document.createElement('div');
+        // calonLabel.textContent = calon;
+        // calonLabel.classList.add('mb-2', 'fw-bold'); // Bold text for the name
+        // progressBarsContainer.appendChild(calonLabel);
+    });
+}
+
+
+
+
+            function updateTable(data) {
+                table.clear(); // Bersihkan tabel sebelum update
+                data.forEach((item, index) => {
+                    table.row.add([
+                        index + 1, // Tambahkan nomor urut
+                        item.kecamatan_name || '-',
+                        item.kelurahan_name || '-',
+                        item.nama || '-',
+                        item.nama_calon || '-',
+                        item.nama_kategori || '-'
+                        //item.ip_address || '-'
+                    ]);
+                });
+                table.draw(); // Render ulang tabel setelah update
+            }
+
+            function updateCharts(data) {
+                const wilayahData = prepareChartData(data, 'kecamatan_name', 'Distribusi Wilayah');
+                const gambarIdData = prepareChartData(data, 'nama_calon', 'Jumlah Pemilih');
+                const kategoriData = prepareChartData(data, 'nama_kategori', 'Jumlah Pemilih');
+
+                if (wilayahChart) wilayahChart.destroy();
+                wilayahChart = new Chart(document.getElementById('wilayahChart').getContext('2d'), {
+                    type: 'pie',
+                    data: wilayahData,
+                    options: {
+                        plugins: {
+                            legend: {
+                                display: false // Menghilangkan label di luar chart
+                            },
+                            datalabels: {
+                                display: true, // Selalu tampilkan label
+                                color: '#fff',
+                                formatter: (value, context) => context.chart.data.labels[context.dataIndex],
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            }
+                        }
+                    },
+                    plugins: [ChartDataLabels]
+                });
+
+                if (gambarIdChart) gambarIdChart.destroy();
+                gambarIdChart = new Chart(document.getElementById('gambarIdChart').getContext('2d'), {
+                    type: 'pie',
+                    data: gambarIdData,
+                    options: {
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            datalabels: {
+                                display: true,
+                                color: '#fff',
+                                formatter: (value, context) => context.chart.data.labels[context.dataIndex],
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            }
+                        }
+                    },
+                    plugins: [ChartDataLabels]
+                });
+
+                if (kategoriChart) kategoriChart.destroy();
+                kategoriChart = new Chart(document.getElementById('kategoriChart').getContext('2d'), {
+                    type: 'pie',
+                    data: kategoriData,
+                    options: {
+                        plugins: {
+                            legend: {
+                                display: false // Menghilangkan label di luar chart
+                            },
+                            datalabels: {
+                                display: true, // Selalu tampilkan label
+                                color: '#fff',
+                                formatter: (value, context) => context.chart.data.labels[context.dataIndex],
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            }
+                        }
+                    },
+                    plugins: [ChartDataLabels]
+                });
+            }
+
+            function prepareChartData(data, key, label) {
+                const counts = {};
+                data.forEach(item => {
+                    const value = item[key] || 'Tidak diketahui';
+                    counts[value] = (counts[value] || 0) + 1;
+                });
+                return {
+                    labels: Object.keys(counts),
+                    datasets: [{
+                        label: label,
+                        data: Object.values(counts),
+                        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'],
+                    }]
+                };
+            }
+
+            function loadKecamatan(kabupatenId) {
+                fetch(`/fetch-kecamatan/${kabupatenId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const kecamatanSelect = document.getElementById('filter-kecamatan');
+                        kecamatanSelect.innerHTML = '<option value="">Semua Kecamatan</option>';
+                        data.forEach(kecamatan => {
+                            kecamatanSelect.innerHTML += `<option value="${kecamatan.id}">${kecamatan.name}</option>`;
+                        });
+                    });
+            }
+
+            function loadKelurahan(kecamatanId) {
+                fetch(`/fetch-kelurahan/${kecamatanId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const kelurahanSelect = document.getElementById('filter-kelurahan');
+                        kelurahanSelect.disabled = false;
+                        kelurahanSelect.innerHTML = '<option value="">Semua Kelurahan</option>';
+                        data.forEach(kelurahan => {
+                            kelurahanSelect.innerHTML += `<option value="${kelurahan.id}">${kelurahan.name}</option>`;
+                        });
+                    });
+            }
+
+            function resetSelects(ids) {
+                ids.forEach(id => {
+                    const select = document.getElementById(id);
+                    const label = select.previousElementSibling ? select.previousElementSibling.textContent : 'Pilihan';
+                    select.innerHTML = `<option value="">Semua ${label}</option>`;
+                    select.disabled = true;
+                });
+            }
+
+            fetchSurveyData();
+            setInterval(fetchSurveyData, 10000);
+        });
+    </script>
+</body>
+</html>
