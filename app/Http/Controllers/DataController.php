@@ -33,32 +33,45 @@ class DataController extends Controller
 
 
     // DataController.php
-public function submitData(Request $request)
-{
-    // Validasi input
-    $request->validate([
-        'nama' => 'required',
-        'kecamatan_id' => 'required',
-        'nagari_id' => 'required',
-        'paslon_id' => 'required',
-        'slug' => 'required'
-    ]);
+    public function submitData(Request $request)
+    {
+        // Validasi input
+        $request->validate([
+            'nama' => 'required',
+            'kecamatan_id' => 'required',
+            'nagari_id' => 'required',
+            'paslon_id' => 'required',
+            'slug' => 'required',
+        ]);
 
-    // Simpan data ke database
-    $simpan = DB::table('hasil_survey')->insert([
-        'nama' => $request->nama,
-        'kecamatan_id' => $request->kecamatan_id,
-        'nagari_id' => $request->nagari_id,
-        'paslon_id' => $request->paslon_id,
-        'slug' => $request->slug,
-        'ip_address' => $request->ip_address,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
+        // Cek apakah data sudah ada dengan ip_address yang sama dan data lainnya
+        $existingData = DB::table('hasil_survey')
+            ->where('ip_address', $request->ip())
+            ->where('nama', $request->nama)
+            ->where('kecamatan_id', $request->kecamatan_id)
+            ->where('nagari_id', $request->nagari_id)
+            ->where('slug', $request->slug)
+            ->first();
 
+        if ($existingData) {
+            return redirect()->route('form.show')->with('error', 'Anda sudah memilih, tidak bisa submit lagi.');
+        }
 
-    return redirect()->route('form.show')->with('success', 'Data berhasil disimpan!');
-}
+        // Simpan data ke database
+        DB::table('hasil_survey')->insert([
+            'nama' => $request->nama,
+            'kecamatan_id' => $request->kecamatan_id,
+            'nagari_id' => $request->nagari_id,
+            'paslon_id' => $request->paslon_id,
+            'slug' => $request->slug,
+            'ip_address' => $request->ip(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->route('form.show')->with('success', 'Data berhasil disimpan!');
+    }
+
 
 }
 
