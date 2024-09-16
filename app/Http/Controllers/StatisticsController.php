@@ -59,7 +59,6 @@ class StatisticsController extends Controller
                         'kp.nama'
                     );
 
-        // Apply filters
         if ($kecamatanId) {
             $query->where('hs.kecamatan_id', $kecamatanId);
         }
@@ -81,7 +80,6 @@ class StatisticsController extends Controller
         $slugCount = [];
 
         foreach ($data as $row) {
-            // Count occurrences by name
             if (isset($kecamatanCount[$row->kecamatan_name])) {
                 $kecamatanCount[$row->kecamatan_name] += $row->count;
             } else {
